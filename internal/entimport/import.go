@@ -126,7 +126,7 @@ func WriteSchema(mutations []schemast.Mutator, opts ...ImportOption) error {
 	if err = schemast.Mutate(ctx, mutations...); err != nil {
 		return err
 	}
-	return ctx.Print(i.schemaPath, schemast.Header(header))
+	return ctx.Print(i.schemaPath, schemast.Header(header), schemast.FormatOnly())
 }
 
 // entEdge creates an edge based on the given params and direction.
