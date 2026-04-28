@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"ariga.io/atlas/sql/schema"
 	"ariga.io/entimport/internal/mux"
@@ -349,11 +350,39 @@ func schemaMutations(field fieldFunc, tables []*schema.Table) ([]schemast.Mutato
 		}
 		upsertOneToX(mutations, table)
 	}
+	// Sort fields, edges, and the mutator slice so output is independent of
+	// the inspector's column and table ordering.
+	keys := make([]string, 0, len(mutations))
+	for k, m := range mutations {
+		keys = append(keys, k)
+		if us, ok := m.(*schemast.UpsertSchema); ok {
+			sortSchemaStable(us)
+		}
+	}
+	sort.Strings(keys)
 	ml := make([]schemast.Mutator, 0, len(mutations))
-	for _, mutator := range mutations {
-		ml = append(ml, mutator)
+	for _, k := range keys {
+		ml = append(ml, mutations[k])
 	}
 	return ml, nil
+}
+
+// sortSchemaStable sorts an UpsertSchema's fields and edges alphabetically by
+// name, with the id field pinned first to match ent's convention.
+func sortSchemaStable(s *schemast.UpsertSchema) {
+	sort.SliceStable(s.Fields, func(i, j int) bool {
+		ni, nj := s.Fields[i].Descriptor().Name, s.Fields[j].Descriptor().Name
+		if ni == "id" && nj != "id" {
+			return true
+		}
+		if nj == "id" && ni != "id" {
+			return false
+		}
+		return ni < nj
+	})
+	sort.SliceStable(s.Edges, func(i, j int) bool {
+		return s.Edges[i].Descriptor().Name < s.Edges[j].Descriptor().Name
+	})
 }
 
 // O2O Two Types - Child Table has a unique reference (FK) to Parent table

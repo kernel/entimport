@@ -52,7 +52,7 @@ func TestPostgres(t *testing.T) {
 			mock: MockPostgresTableFieldsWithAttributes(),
 			expectedFields: map[string]string{
 				"user": `func (User) Fields() []ent.Field {
-	return []ent.Field{field.Int("id").Comment("some id"), field.Int16("age").Optional(), field.String("name").Comment("first name"), field.String("last_name").Optional().Comment("family name")}
+	return []ent.Field{field.Int("id").Comment("some id"), field.Int16("age").Optional(), field.String("last_name").Optional().Comment("family name"), field.String("name").Comment("first name")}
 }`,
 			},
 			expectedEdges: map[string]string{
@@ -67,7 +67,7 @@ func TestPostgres(t *testing.T) {
 			mock: MockPostgresTableFieldsWithUniqueIndexes(),
 			expectedFields: map[string]string{
 				"user": `func (User) Fields() []ent.Field {
-	return []ent.Field{field.Int("id").Comment("some id"), field.Int16("age").Unique(), field.String("name").Comment("first name"), field.String("last_name").Optional().Comment("family name")}
+	return []ent.Field{field.Int("id").Comment("some id"), field.Int16("age").Unique(), field.String("last_name").Optional().Comment("family name"), field.String("name").Comment("first name")}
 }`,
 			},
 			expectedEdges: map[string]string{
@@ -82,7 +82,7 @@ func TestPostgres(t *testing.T) {
 			mock: MockPostgresMultiTableFields(),
 			expectedFields: map[string]string{
 				"user": `func (User) Fields() []ent.Field {
-	return []ent.Field{field.Int("id"), field.Int16("age").Unique(), field.String("name"), field.String("last_name").Optional().Comment("not so boring")}
+	return []ent.Field{field.Int("id"), field.Int16("age").Unique(), field.String("last_name").Optional().Comment("not so boring"), field.String("name")}
 }`,
 				"pet": `func (Pet) Fields() []ent.Field {
 	return []ent.Field{field.Int("id").Comment("pet id"), field.Int16("age").Optional(), field.String("name")}
@@ -205,7 +205,7 @@ func TestPostgres(t *testing.T) {
 			mock: MockPostgresO2OSameType(),
 			expectedFields: map[string]string{
 				"node": `func (Node) Fields() []ent.Field {
-	return []ent.Field{field.Int("id"), field.Int("value"), field.Int("node_next").Optional().Unique()}
+	return []ent.Field{field.Int("id"), field.Int("node_next").Optional().Unique(), field.Int("value")}
 }`,
 			},
 			expectedEdges: map[string]string{
@@ -256,7 +256,7 @@ func TestPostgres(t *testing.T) {
 			mock: MockPostgresO2MSameType(),
 			expectedFields: map[string]string{
 				"node": `func (Node) Fields() []ent.Field {
-	return []ent.Field{field.Int("id"), field.Int("value"), field.Int("node_children").Optional()}
+	return []ent.Field{field.Int("id"), field.Int("node_children").Optional(), field.Int("value")}
 }`,
 			},
 			expectedEdges: map[string]string{
@@ -315,6 +315,32 @@ func TestPostgres(t *testing.T) {
 				r.NoError(err)
 				r.EqualValues(tt.expectedEdges[e], actualEdges.String())
 			}
+		})
+	}
+}
+
+// TestPostgresDeterministicOutput asserts that entimport output is invariant
+// under reordering of the inspector's columns and tables.
+func TestPostgresDeterministicOutput(t *testing.T) {
+	var (
+		ctx        = context.Background()
+		testSchema = "public"
+		dsn        = "postgres://postgres:pass@localhost:5434/test"
+	)
+	tests := []struct {
+		name string
+		mock func() *schema.Schema
+	}{
+		{"multi_table_fields", MockPostgresMultiTableFields},
+		{"m2m_two_types", MockPostgresM2MTwoTypes},
+		{"o2o_two_types", MockPostgresO2OTwoTypes},
+		{"o2m_two_types", MockPostgresO2MTwoTypes},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := runEntimport(t, ctx, dialect.Postgres, dsn, testSchema, tt.mock())
+			reversed := runEntimport(t, ctx, dialect.Postgres, dsn, testSchema, reverseSchemaInputs(tt.mock()))
+			require.Equal(t, original, reversed)
 		})
 	}
 }
