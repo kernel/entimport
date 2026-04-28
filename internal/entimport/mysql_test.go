@@ -75,7 +75,7 @@ func TestMySQL(t *testing.T) {
 			mock: MockMySQLTableFieldsWithAttributes(),
 			expectedFields: map[string]string{
 				"user": `func (User) Fields() []ent.Field {
-	return []ent.Field{field.Int("id").Comment("some id"), field.Int8("age").Optional(), field.String("name").Comment("first name"), field.String("last_name").Optional().Comment("family name")}
+	return []ent.Field{field.Int("id").Comment("some id"), field.Int8("age").Optional(), field.String("last_name").Optional().Comment("family name"), field.String("name").Comment("first name")}
 }`,
 			},
 			expectedEdges: map[string]string{
@@ -262,7 +262,7 @@ func TestMySQL(t *testing.T) {
 			mock: MockMySQLO2OSameType(),
 			expectedFields: map[string]string{
 				"node": `func (Node) Fields() []ent.Field {
-	return []ent.Field{field.Int("id"), field.Int("value"), field.Int("node_next").Optional().Unique()}
+	return []ent.Field{field.Int("id"), field.Int("node_next").Optional().Unique(), field.Int("value")}
 }`,
 			},
 			expectedEdges: map[string]string{
@@ -331,7 +331,7 @@ func TestMySQL(t *testing.T) {
 			mock: MockMySQLO2MSameType(),
 			expectedFields: map[string]string{
 				"node": `func (Node) Fields() []ent.Field {
-	return []ent.Field{field.Int("id"), field.Int("value"), field.Int("node_children").Optional()}
+	return []ent.Field{field.Int("id"), field.Int("node_children").Optional(), field.Int("value")}
 }`,
 			},
 			expectedEdges: map[string]string{
@@ -408,6 +408,32 @@ func TestMySQL(t *testing.T) {
 				r.NoError(err)
 				r.EqualValues(tt.expectedAnnotations[e], actualAnnotations.String())
 			}
+		})
+	}
+}
+
+// TestMySQLDeterministicOutput asserts that entimport output is invariant
+// under reordering of the inspector's columns and tables.
+func TestMySQLDeterministicOutput(t *testing.T) {
+	var (
+		ctx        = context.Background()
+		testSchema = "test"
+		dsn        = "mysql://root:pass@tcp(localhost:3308)/test?parseTime=True"
+	)
+	tests := []struct {
+		name string
+		mock func() *schema.Schema
+	}{
+		{"multi_table_fields", MockMySQLMultiTableFields},
+		{"m2m_two_types", MockMySQLM2MTwoTypes},
+		{"o2o_two_types", MockMySQLO2OTwoTypes},
+		{"o2m_two_types", MockMySQLO2MTwoTypes},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := runEntimport(t, ctx, dialect.MySQL, dsn, testSchema, tt.mock())
+			reversed := runEntimport(t, ctx, dialect.MySQL, dsn, testSchema, reverseSchemaInputs(tt.mock()))
+			require.Equal(t, original, reversed)
 		})
 	}
 }

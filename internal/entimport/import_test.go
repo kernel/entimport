@@ -11,6 +11,7 @@ import (
 	"ariga.io/atlas/sql/mysql"
 	"ariga.io/atlas/sql/postgres"
 	"ariga.io/atlas/sql/schema"
+	"ariga.io/entimport/internal/entimport"
 	"ariga.io/entimport/internal/mux"
 
 	"github.com/stretchr/testify/mock"
@@ -4057,4 +4058,41 @@ func mockMux(ctx context.Context, dlct string, data *schema.Schema, schemaName s
 		}, nil
 	}, dlct)
 	return m
+}
+
+// reverseSchemaInputs reverses s.Tables and each table's Columns to simulate
+// input ordering drift from the upstream inspector. Foreign keys are left
+// alone because their position in a join table determines M2M edge direction.
+func reverseSchemaInputs(s *schema.Schema) *schema.Schema {
+	for _, t := range s.Tables {
+		for i, j := 0, len(t.Columns)-1; i < j; i, j = i+1, j-1 {
+			t.Columns[i], t.Columns[j] = t.Columns[j], t.Columns[i]
+		}
+	}
+	for i, j := 0, len(s.Tables)-1; i < j; i, j = i+1, j-1 {
+		s.Tables[i], s.Tables[j] = s.Tables[j], s.Tables[i]
+	}
+	return s
+}
+
+// runEntimport runs the importer and returns generated file name -> contents.
+func runEntimport(
+	t *testing.T,
+	ctx context.Context,
+	dlct, dsn, schemaName string,
+	s *schema.Schema,
+) map[string]string {
+	t.Helper()
+	r := require.New(t)
+	m := mockMux(ctx, dlct, s, schemaName)
+	drv, err := m.OpenImport(dsn)
+	r.NoError(err)
+	importer, err := entimport.NewImport(entimport.WithDriver(drv))
+	r.NoError(err)
+	out := createTempDir(t)
+	mutations, err := importer.SchemaMutations(ctx)
+	r.NoError(err)
+	err = entimport.WriteSchema(mutations, entimport.WithSchemaPath(out))
+	r.NoError(err)
+	return readDir(t, out)
 }
