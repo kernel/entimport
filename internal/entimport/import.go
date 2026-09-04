@@ -297,7 +297,7 @@ func upsertNode(field fieldFunc, table *schema.Table) (*schemast.UpsertSchema, e
 		}
 	}
 	for _, index := range table.Indexes {
-		if index.Unique && len(index.Parts) == 1 {
+		if index.Unique && len(index.Parts) == 1 && index.Parts[0].C != nil {
 			fields[index.Parts[0].C.Name].Descriptor().Unique = true
 		}
 	}
@@ -396,7 +396,7 @@ func upsertOneToX(mutations map[string]schemast.Mutator, table *schema.Table) {
 	}
 	idxs := make(map[string]*schema.Index)
 	for _, idx := range table.Indexes {
-		if len(idx.Parts) != 1 {
+		if len(idx.Parts) != 1 || idx.Parts[0].C == nil {
 			continue
 		}
 		idxs[idx.Parts[0].C.Name] = idx
