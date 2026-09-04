@@ -454,14 +454,20 @@ func TestMySQLExpressionIndexes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			original := runEntimport(t, ctx, dialect.MySQL, dsn, testSchema, tt.mock())
 			s := tt.mock()
+			for _, table := range s.Tables {
+				table.AddColumns(
+					schema.NewStringColumn("kind", "varchar", schema.StringSize(255)),
+					schema.NewStringColumn("value", "varchar", schema.StringSize(255)),
+				)
+			}
+			original := runEntimport(t, ctx, dialect.MySQL, dsn, testSchema, s)
 			for _, table := range s.Tables {
 				table.Indexes = append(table.Indexes, &schema.Index{
 					Name:   "functional_unique",
 					Unique: true,
 					Parts: []*schema.IndexPart{
-						{X: &schema.RawExpr{X: "abs(id)"}},
+						{X: &schema.RawExpr{X: "CASE WHEN kind = 'number' THEN value ELSE NULL END"}},
 					},
 				})
 			}
